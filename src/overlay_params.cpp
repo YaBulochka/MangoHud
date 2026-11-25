@@ -771,6 +771,20 @@ set_parameters_from_options(struct overlay_params *params)
       params->options.erase("full");
    }
    for (auto& it : params->options) {
+      // Per-GPU rows: gpu_stats:0, vram:1, proc_vram:0
+      size_t colon = it.first.find(':');
+      if (colon != std::string::npos) {
+         std::string base = it.first.substr(0, colon);
+         if (base == "gpu_stats" || base == "vram" || base == "proc_vram") {
+            if (base == "gpu_stats")
+               params->enabled[OVERLAY_PARAM_ENABLED_gpu_stats] = true;
+            else if (base == "vram")
+               params->enabled[OVERLAY_PARAM_ENABLED_vram] = true;
+            else
+               params->enabled[OVERLAY_PARAM_ENABLED_proc_vram] = true;
+            continue;
+         }
+      }
 #define OVERLAY_PARAM_BOOL(name)                                 \
       if (it.first == #name) {                                   \
           params->enabled[OVERLAY_PARAM_ENABLED_##name] =        \

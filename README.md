@@ -2,6 +2,9 @@
 
 A Vulkan and OpenGL overlay for monitoring FPS, temperatures, CPU/GPU load and more.
 
+> **Fork note:** this fork adds per-GPU HUD ordering and APU sensor fixes on top of
+> MangoHud v0.8.4. See [FORK.md](FORK.md) for details.
+
 ![Example gif showing a standard performance readout with frametimes](assets/overlay_example.gif)
 
 ---

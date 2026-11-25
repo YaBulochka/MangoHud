@@ -54,6 +54,8 @@ struct Tracepoint;
    OVERLAY_PARAM_BOOL(ram_temp)                      \
    OVERLAY_PARAM_BOOL(swap)                          \
    OVERLAY_PARAM_BOOL(vram)                          \
+   OVERLAY_PARAM_BOOL(vram_proc)                     \
+   OVERLAY_PARAM_BOOL(vram_no_label)                 \
    OVERLAY_PARAM_BOOL(proc_vram)                     \
    OVERLAY_PARAM_BOOL(procmem)                       \
    OVERLAY_PARAM_BOOL(procmem_shared)                \

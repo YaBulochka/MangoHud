@@ -76,6 +76,7 @@ class HudElements{
         static void version();
         static void time();
         static void gpu_stats();
+        static int gpu_sel();
         static void cpu_stats();
         static void core_load();
         static void io_stats();

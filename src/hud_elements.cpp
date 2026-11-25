@@ -1,5 +1,6 @@
 #include <spdlog/spdlog.h>
 #include <algorithm>
+#include <cstdlib>
 #include <functional>
 #include <sstream>
 #include <cmath>
@@ -281,9 +282,29 @@ void HudElements::version(){
     }
 }
 
+int HudElements::gpu_sel() {
+    if (HUDElements.place < 0 ||
+        (size_t)HUDElements.place >= HUDElements.ordered_functions.size())
+        return -1;
+
+    const std::string& v = HUDElements.ordered_functions[HUDElements.place].value;
+    if (v.size() > 1 && v[0] == '@') {
+        char* end = nullptr;
+        long n = strtol(v.c_str() + 1, &end, 10);
+        if (end != v.c_str() + 1 && n >= 0)
+            return (int)n;
+    }
+    return -1;
+}
+
 void HudElements::gpu_stats(){
     if (HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_gpu_stats] && gpus){
-        for (auto& gpu : gpus->selected_gpus()) {
+        int sel = gpu_sel();
+        auto selected = gpus->selected_gpus();
+        for (size_t idx = 0; idx < selected.size(); idx++) {
+            if (sel >= 0 && (int)idx != sel)
+                continue;
+            auto& gpu = selected[idx];
             ImguiNextColumnFirstItem();
             HUDElements.TextColored(HUDElements.colors.gpu, "%s", gpu->gpu_text().c_str());
 
@@ -327,7 +348,7 @@ void HudElements::gpu_stats(){
                         HUDElements.TextColored(HUDElements.colors.text, "°C");
             }
 
-            if (gpu->metrics.junction_temp > -1 && HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_gpu_junction_temp]) {
+            if (!gpu->is_apu() && gpu->metrics.junction_temp > -1 && HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_gpu_junction_temp]) {
                 ImguiNextColumnOrNewRow();
                 if (HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_temp_fahrenheit])
                     right_aligned_text(text_color, HUDElements.ralign_width, "%i", HUDElements.convert_to_fahrenheit(gpu->metrics.junction_temp));
@@ -632,26 +653,22 @@ void HudElements::io_stats(){
 
 void HudElements::vram(){
     if (HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_vram] && gpus){
-        size_t i = 0;
         if (HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_gpu_stats]){
-            for (auto& gpu : gpus->selected_gpus()) {
+            int sel = gpu_sel();
+            auto selected = gpus->selected_gpus();
+            for (size_t i = 0; i < selected.size(); i++) {
+                if (sel >= 0 && (int)i != sel)
+                    continue;
+                auto& gpu = selected[i];
                 ImguiNextColumnFirstItem();
-                // Just iterate through the user selected GPUs
-                if (!HUDElements.params->gpu_list.empty())
-                    for (auto& gpu_index : HUDElements.params->gpu_list)
-                        if (gpu_index < gpus->available_gpus.size())
-                            if (i != gpu_index)
-                                continue;
 
-
-                HUDElements.TextColored(HUDElements.colors.vram, gpu->vram_text().c_str());
+                if (!HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_vram_no_label])
+                    HUDElements.TextColored(HUDElements.colors.vram, gpu->vram_text().c_str());
 
                 ImguiNextColumnOrNewRow();
                 // Add gtt_used to vram usage for APUs
-                if (gpu->is_apu())
-                    right_aligned_text(HUDElements.colors.text, HUDElements.ralign_width, "%.1f", gpu->metrics.sys_vram_used + gpu->metrics.gtt_used);
-                else
-                    right_aligned_text(HUDElements.colors.text, HUDElements.ralign_width, "%.1f", gpu->metrics.sys_vram_used);
+                double vram_used = gpu->metrics.sys_vram_used + (gpu->is_apu() ? gpu->metrics.gtt_used : 0.0);
+                right_aligned_text(HUDElements.colors.text, HUDElements.ralign_width, "%.1f", vram_used);
                 if (!HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_hud_compact]){
                     ImGui::SameLine(0,1.0f);
                     ImGui::PushFont(HUDElements.sw_stats->font_small);
@@ -659,30 +676,47 @@ void HudElements::vram(){
                     ImGui::PopFont();
                 }
 
-                if (gpu->metrics.memory_temp > -1 && HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_gpu_mem_temp]) {
+                if (HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_vram_proc]) {
                     ImguiNextColumnOrNewRow();
-                    if (HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_temp_fahrenheit])
-                        right_aligned_text(HUDElements.colors.text, HUDElements.ralign_width, "%i", HUDElements.convert_to_fahrenheit(gpu->metrics.memory_temp));
-                    else
-                        right_aligned_text(HUDElements.colors.text, HUDElements.ralign_width, "%i", gpu->metrics.memory_temp);
-                    ImGui::SameLine(0, 1.0f);
-                    if (HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_temp_fahrenheit])
-                        HUDElements.TextColored(HUDElements.colors.text, "°F");
-                    else
-                        HUDElements.TextColored(HUDElements.colors.text, "°C");
+                    right_aligned_text(HUDElements.colors.text, HUDElements.ralign_width, "%.1f", gpu->metrics.proc_vram_used);
+                    if (!HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_hud_compact]){
+                        ImGui::SameLine(0,1.0f);
+                        ImGui::PushFont(HUDElements.sw_stats->font_small);
+                        HUDElements.TextColored(HUDElements.colors.text, "GiB");
+                        ImGui::PopFont();
+                    }
                 }
 
+                if (!HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_horizontal])
+                    ImGui::TableNextRow();
+
                 if (HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_gpu_mem_clock]){
-                    ImguiNextColumnOrNewRow();
+                    ImguiNextColumnOrNewRow(1);
                     right_aligned_text(HUDElements.colors.text, HUDElements.ralign_width, "%i", gpu->metrics.MemClock);
                     ImGui::SameLine(0, 1.0f);
                     ImGui::PushFont(HUDElements.sw_stats->font_small);
                     HUDElements.TextColored(HUDElements.colors.text, "MHz");
                     ImGui::PopFont();
                 }
+
+                int vram_temp = gpu->metrics.memory_temp;
+                if (gpu->is_apu())
+                    vram_temp = (HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_ram_temp] && mem_temp > -1) ? mem_temp : -1;
+
+                if (vram_temp > -1 && HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_gpu_mem_temp]) {
+                    ImguiNextColumnOrNewRow();
+                    if (HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_temp_fahrenheit])
+                        right_aligned_text(HUDElements.colors.text, HUDElements.ralign_width, "%i", HUDElements.convert_to_fahrenheit(vram_temp));
+                    else
+                        right_aligned_text(HUDElements.colors.text, HUDElements.ralign_width, "%i", vram_temp);
+                    ImGui::SameLine(0, 1.0f);
+                    if (HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_temp_fahrenheit])
+                        HUDElements.TextColored(HUDElements.colors.text, "°F");
+                    else
+                        HUDElements.TextColored(HUDElements.colors.text, "°C");
+                }
                 if (!HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_horizontal])
                     ImGui::TableNextRow();
-                i++;
             }
         }
     }
@@ -698,12 +732,19 @@ void HudElements::proc_vram() {
     if (!gpus)
         return;
 
-    size_t idx = 0;
-    for (const std::shared_ptr<GPU>& gpu : gpus->selected_gpus()) {
+    if (HUDElements.params->enabled[OVERLAY_PARAM_ENABLED_vram_proc])
+        return;
+
+    int sel = gpu_sel();
+    auto selected = gpus->selected_gpus();
+    for (size_t i = 0; i < selected.size(); i++) {
+        if (sel >= 0 && (int)i != sel)
+            continue;
+        const std::shared_ptr<GPU>& gpu = selected[i];
         ImguiNextColumnFirstItem();
 
-        if (gpus->selected_gpus().size() > 1)
-            HUDElements.TextColored(HUDElements.colors.vram, "PVRAM%i", idx++);
+        if (selected.size() > 1)
+            HUDElements.TextColored(HUDElements.colors.vram, "PVRAM%zu", i);
         else
             HUDElements.TextColored(HUDElements.colors.vram, "PVRAM");
 
@@ -1945,8 +1986,21 @@ void HudElements::ftrace() {
 }
 
 void HudElements::sort_elements(const std::pair<std::string, std::string>& option) {
-    const auto& param = option.first;
-    const auto& value = option.second;
+    std::string param = option.first;
+    std::string value = option.second;
+
+    // Per-GPU rows: gpu_stats:0, vram:1, proc_vram:0
+    size_t colon = param.find(':');
+    if (colon != std::string::npos) {
+        std::string base = param.substr(0, colon);
+        std::string index = param.substr(colon + 1);
+        if ((base == "gpu_stats" || base == "vram" || base == "proc_vram") &&
+            !index.empty() &&
+            index.find_first_not_of("0123456789") == std::string::npos) {
+            param = base;
+            value = "@" + index;
+        }
+    }
 
     // Initialize a map of display parameters and their corresponding functions.
     const std::map<std::string, Function> display_params = {
